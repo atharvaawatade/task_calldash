@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment (NEVER commit this)
+.env
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Docker volumes
+postgres_data/
+redis_data/
+qdrant_data/
+
+# Logs
+*.log
+
+# Temporary / internal docs
+implementation_plan.md
+Real-Time_Voice_AI_Architecture.docx
+Round 1 Task.pdf

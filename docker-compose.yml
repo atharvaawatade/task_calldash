@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  # =====================================================
+  #  Infrastructure
+  # =====================================================
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: voice-ai-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-voice_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: voice-ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    container_name: voice-ai-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =====================================================
+  #  Application Services
+  # =====================================================
+
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    container_name: voice-ai-server
+    ports:
+      - "${GATEWAY_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      RAG_SERVER_URL: http://rag-server:8001
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  rag-server:
+    build:
+      context: .
+      dockerfile: docker/rag-server.Dockerfile
+    container_name: voice-ai-rag
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  voice-agent:
+    build:
+      context: .
+      dockerfile: docker/voice-agent.Dockerfile
+    container_name: voice-ai-agent
+    env_file: .env
+    environment:
+      RAG_SERVER_URL: http://rag-server:8001
+      API_SERVER_URL: http://server:3000
+    depends_on:
+      - server
+      - rag-server
+    restart: unless-stopped
+
+  client:
+    build:
+      context: .
+      dockerfile: docker/client.Dockerfile
+    container_name: voice-ai-client
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
